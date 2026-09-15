@@ -1,37 +1,55 @@
-# BINTANGIN
+# BINTANGIN — Smart Review Card
 
-BINTANGIN is a dynamic QR/NFC system for printed business cards used to collect customer feedback. Each card carries a permanent QR code (e.g. `/q/BGN0001`). Before activation, scanning it opens an activation form; after activation, the same QR opens a star-rating page: a 1–3 star rating routes the customer to a WhatsApp feedback message (pre-filled with the rating given), while a 4–5 star rating redirects straight to the shop's Google Review link. Both destinations are stored per card and editable from `/admin` without reprinting the card.
+Full-stack QR/NFC system for BINTANGIN cards. Each printed card keeps a permanent URL such as `/q/BGN0001`. The destination can be changed from the admin dashboard without reprinting the card.
 
-## Key technologies
+## Stack
 
-- **TanStack Start** (React 19, TanStack Router v1) — file-based routing, SSR
-- **Vite 7** — build tooling
-- **Tailwind CSS 4** — styling, mobile-first
-- **Neon Postgres** (via `@neondatabase/serverless` + `drizzle-orm/neon-http`) + **Drizzle ORM** — persistent storage for cards and scans, reachable from any host via `DATABASE_URL`
-- **qrcode** — QR generation (high error correction, black/white, no logo)
-- **jszip** — bulk ZIP download of generated QR codes
-- Hosting is host-agnostic — deploy the standard Node output (`pnpm build` then `pnpm start`) to whichever platform you choose
+- TanStack Start + React
+- Vite + Nitro production server
+- Tailwind CSS
+- Neon PostgreSQL + Drizzle ORM
+- QR PNG/SVG + ZIP generation
 
-## What's live now
+## Railway deployment
 
-- `/` — landing page
-- `/q/$code` — activation form (unactivated cards) or the star-rating flow (activated cards: 1–3 stars → WhatsApp feedback, 4–5 stars → Google Review), with a "card not found" state. Activation, and every subsequent visit, is backed by the database — refreshing or opening the same URL from another device shows the same state.
-- `/admin` — dashboard with card counts, searchable card table (activate/edit/deactivate), and a fully working bulk QR generator (PNG, SVG, and ZIP download, real QR images pointing at `/q/<code>`). Generating QR codes also creates the matching `INACTIVE` rows in the database.
+This repository is configured for Railway's Docker builder.
 
-All card data is read and written through server functions in `src/server/cards.functions.ts`, backed by the `cards` and `scans` tables defined in `db/schema.ts`. `src/data/cards.ts` is kept only as demo/seed fixture data and is not read by any route.
+### Required Railway Variables
 
-## Running locally
-
-```bash
-pnpm install
-pnpm dev
+```env
+DATABASE_URL=postgresql://...
+ADMIN_PASSWORD=your-strong-admin-password
 ```
 
-Visit `http://localhost:3000`.
+Railway supplies `PORT` automatically. The Nitro server listens on the Railway-provided port in production.
 
-Create a `.env` file (see `.env.example`) with `DATABASE_URL` pointing at your Neon database and `ADMIN_PASSWORD` set, or the persistence and `/admin` login features won't work.
+### Build and start
 
-## Database
+```bash
+npm install
+npm run build
+npm run start
+```
 
-Schema lives in `db/schema.ts`; SQL migrations are generated into `netlify/database/migrations/` (folder name is legacy, just SQL files now) with `npx drizzle-kit generate --name <name>`. Nothing applies them automatically anymore — run `npx drizzle-kit migrate` yourself (with `DATABASE_URL` set) after generating a migration and whenever you deploy schema changes to a new environment. See `.env.example` for the environment variables involved.
+The production build is emitted to `.output/server/index.mjs`.
 
+### Database
+
+The application does not create database tables automatically. Apply the SQL migration in `netlify/database/migrations/` to the PostgreSQL database once before using the app. The `netlify/` directory name is retained only for migration history compatibility; the application is not coupled to Netlify.
+
+## Routes
+
+- `/` — landing page
+- `/q/:code` — activation/rating flow
+- `/admin/login` — admin login
+- `/admin` — card management + QR generator
+
+## Card flow
+
+1. A generated code starts as `INACTIVE`.
+2. Scanning `/q/<code>` shows activation when the card is inactive.
+3. Activation stores the shop name, Google Review URL and/or WhatsApp number.
+4. Future scans show the rating page.
+5. 4–5 stars redirect to Google Review.
+6. 1–3 stars open WhatsApp feedback.
+7. Editing the card changes destinations without changing the printed QR URL.

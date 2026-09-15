@@ -1,6 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import { eq } from 'drizzle-orm'
-import { db } from '../../db/index.js'
+import { getDb } from '../../db/index.js'
 import { cards, scans } from '../../db/schema.js'
 import type { CardStatus } from '@/data/cards'
 import { requireAdmin } from './adminMiddleware'
@@ -32,7 +32,7 @@ function toDto(row: typeof cards.$inferSelect, scanCount = 0): CardDto {
 }
 
 async function scanCountFor(cardId: number): Promise<number> {
-  const rows = await db.select().from(scans).where(eq(scans.cardId, cardId))
+  const rows = await getDb().select({ id: scans.id }).from(scans).where(eq(scans.cardId, cardId))
   return rows.length
 }
 
@@ -40,7 +40,7 @@ export const getCard = createServerFn({ method: 'GET' })
   .inputValidator((data: { code: string }) => data)
   .handler(async ({ data }) => {
     const code = data.code.trim().toUpperCase()
-    const [row] = await db.select().from(cards).where(eq(cards.code, code))
+    const [row] = await getDb().select().from(cards).where(eq(cards.code, code))
     if (!row) return null
     return toDto(row, await scanCountFor(row.id))
   })
@@ -48,8 +48,8 @@ export const getCard = createServerFn({ method: 'GET' })
 export const listCards = createServerFn({ method: 'GET' })
   .middleware([requireAdmin])
   .handler(async () => {
-    const rows = await db.select().from(cards).orderBy(cards.code)
-    const counts = await db.select().from(scans)
+    const rows = await getDb().select().from(cards).orderBy(cards.code)
+    const counts = await getDb().select().from(scans)
     const countByCard = new Map<number, number>()
     for (const scan of counts) {
       countByCard.set(scan.cardId, (countByCard.get(scan.cardId) ?? 0) + 1)
@@ -65,7 +65,7 @@ export const activateCard = createServerFn({ method: 'POST' })
     const reviewUrl = data.reviewUrl.trim()
     const whatsapp = data.whatsapp.trim()
 
-    const [row] = await db.select().from(cards).where(eq(cards.code, code))
+    const [row] = await getDb().select().from(cards).where(eq(cards.code, code))
     if (!row) {
       throw new Error('Kartu tidak ditemukan.')
     }
@@ -103,7 +103,7 @@ export const updateCard = createServerFn({ method: 'POST' })
     const reviewUrl = data.reviewUrl.trim()
     const whatsapp = data.whatsapp.trim()
 
-    const [row] = await db.select().from(cards).where(eq(cards.code, code))
+    const [row] = await getDb().select().from(cards).where(eq(cards.code, code))
     if (!row) {
       throw new Error('Kartu tidak ditemukan.')
     }
@@ -132,7 +132,7 @@ export const deactivateCard = createServerFn({ method: 'POST' })
   .inputValidator((data: { code: string }) => data)
   .handler(async ({ data }) => {
     const code = data.code.trim().toUpperCase()
-    const [row] = await db.select().from(cards).where(eq(cards.code, code))
+    const [row] = await getDb().select().from(cards).where(eq(cards.code, code))
     if (!row) {
       throw new Error('Kartu tidak ditemukan.')
     }
@@ -150,12 +150,12 @@ export const recordScan = createServerFn({ method: 'POST' })
   .inputValidator((data: { code: string; userAgent: string | null }) => data)
   .handler(async ({ data }) => {
     const code = data.code.trim().toUpperCase()
-    const [row] = await db.select().from(cards).where(eq(cards.code, code))
+    const [row] = await getDb().select().from(cards).where(eq(cards.code, code))
     if (!row || row.status !== 'ACTIVE') {
       return { recorded: false }
     }
 
-    await db.insert(scans).values({
+    await getDb().insert(scans).values({
       cardId: row.id,
       userAgent: data.userAgent,
     })
@@ -175,12 +175,12 @@ export const generateCards = createServerFn({ method: 'POST' })
       `${prefix}${String(startNumber + i).padStart(4, '0')}`,
     )
 
-    const existing = await db.select().from(cards)
+    const existing = await getDb().select().from(cards)
     const existingCodes = new Set(existing.map((row) => row.code))
     const newCodes = codes.filter((code) => !existingCodes.has(code))
 
     if (newCodes.length > 0) {
-      await db.insert(cards).values(newCodes.map((code) => ({ code, status: 'INACTIVE' })))
+      await getDb().insert(cards).values(newCodes.map((code) => ({ code, status: 'INACTIVE' })))
     }
 
     return { codes, created: newCodes.length, skipped: codes.length - newCodes.length }
