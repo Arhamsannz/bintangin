@@ -4,8 +4,7 @@ WORKDIR /app
 
 COPY package*.json ./
 
-# Menggunakan npm ci agar instalasi persis sesuai package-lock.json
-RUN npm ci
+RUN npm install
 
 COPY . .
 
